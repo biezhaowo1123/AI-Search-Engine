@@ -35,11 +35,23 @@ class AISummaryService:
         }
 
         payload = {
-            "model": "abab6-chat",
+            "model": "abab5.5-chat",
             "tokens_to_generate": 200,
             "temperature": 0.7,
+            "bot_setting": [
+                {
+                    "bot_name": "AI助手",
+                    "identity": "助手",
+                    "content": "你是一个友好的AI助手"
+                }
+            ],
+            "reply_constraints": {
+                "reply_language": "auto",
+                "sender_type": "BOT",
+                "sender_name": "AI助手"
+            },
             "messages": [
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt, "sender_name": "用户", "sender_type": "USER"}
             ]
         }
 
@@ -48,7 +60,9 @@ class AISummaryService:
                 response = await client.post(self.api_url, headers=headers, json=payload)
                 if response.status_code == 200:
                     data = response.json()
-                    return data.get("choices", [{}])[0].get("text", "").strip()
+                    reply = data.get("reply", "")
+                    if reply:
+                        return reply.strip()
         except Exception as e:
             print(f"AI Summary Error: {e}")
 
