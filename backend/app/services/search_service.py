@@ -64,29 +64,11 @@ CRAWLER_SOURCES = {
         "offset_calc": lambda page: page,
         "priority": 4,
     },
-    "zhihu": {
-        "name": "知乎",
-        "url": "https://www.zhihu.com/search?type=content&q={query}",
-        "offset_calc": lambda page: page,
-        "priority": 5,
-    },
-    "github": {
-        "name": "GitHub",
-        "url": "https://github.com/search?q={query}&type=repositories",
-        "offset_calc": lambda page: page,
-        "priority": 6,
-    },
-    "stackoverflow": {
-        "name": "StackOverflow",
-        "url": "https://stackoverflow.com/search?q={query}",
-        "offset_calc": lambda page: page,
-        "priority": 7,
-    },
     "csdn": {
         "name": "CSDN",
         "url": "https://so.csdn.net/so/search?q={query}&page={page}",
         "offset_calc": lambda page: page,
-        "priority": 8,
+        "priority": 5,
     },
 }
 
@@ -143,9 +125,6 @@ class SearchService:
                 "bing": self._parse_bing,
                 "sogou": self._parse_sogou,
                 "toutiao": self._parse_toutiao,
-                "zhihu": self._parse_zhihu,
-                "github": self._parse_github,
-                "stackoverflow": self._parse_stackoverflow,
                 "csdn": self._parse_csdn,
             }
             
@@ -212,56 +191,6 @@ class SearchService:
                 results.append(SearchResult(
                     title=title,
                     url=link_elem.get("href", "") if link_elem else "",
-                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
-                    source=name
-                ))
-        return results
-
-    def _parse_zhihu(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
-        results = []
-        for item in soup.select(".List-item, .ContentItem")[:self.max_results_per_source]:
-            title_elem = item.select_one(".ContentItem-title a") or item.select_one("h2 a")
-            link_elem = item.select_one("a[itemprop='url']")
-            snippet_elem = item.select_one(".RichText") or item.select_one(".excerpt")
-            title = title_elem.get_text(strip=True) if title_elem else ""
-            if title:
-                url = title_elem.get("href", "") if title_elem else ""
-                if url and not url.startswith("http"):
-                    url = f"https://www.zhihu.com{url}"
-                results.append(SearchResult(
-                    title=title,
-                    url=url,
-                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
-                    source=name
-                ))
-        return results
-
-    def _parse_github(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
-        results = []
-        for item in soup.select(".repo-list-item, .Box-row")[:self.max_results_per_source]:
-            title_elem = item.select_one("a[itemprop='name codeRepository']") or item.select_one(".h3")
-            link_elem = item.select_one("a[itemprop='name codeRepository']")
-            snippet_elem = item.select_one(".col-9") or item.select_one(".prc-description")
-            if title_elem:
-                title = title_elem.get_text(strip=True)
-                results.append(SearchResult(
-                    title=title,
-                    url=f"https://github.com{link_elem.get('href', '')}" if link_elem else "",
-                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
-                    source=name
-                ))
-        return results
-
-    def _parse_stackoverflow(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
-        results = []
-        for item in soup.select(".question-summary, .s-post-summary")[:self.max_results_per_source]:
-            title_elem = item.select_one(".question-hyperlink") or item.select_one(".s-post-summary--header")
-            link_elem = item.select_one(".question-hyperlink")
-            snippet_elem = item.select_one(".excerpt") or item.select_one(".s-post-summary--summary")
-            if title_elem:
-                results.append(SearchResult(
-                    title=title_elem.get_text(strip=True),
-                    url=f"https://stackoverflow.com{link_elem.get('href', '')}" if link_elem else "",
                     snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
                     source=name
                 ))
