@@ -4,10 +4,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    SHENMA_APP_KEY = os.getenv("SHENMA_APP_KEY", "")
-    SHENMA_APP_SECRET = os.getenv("SHENMA_APP_SECRET", "")
-    SHENMA_API_URL = "https://api.shenmadu.com/v1/search"
-
     MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
     MINIMAX_API_URL = os.getenv("MINIMAX_API_URL", "https://api.minimax.chat/v1")
 
