@@ -1,3 +1,7 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+
 interface SearchResult {
   title: string
   url: string
@@ -21,11 +25,39 @@ const SOURCE_COLORS: Record<string, string> = {
   'CSDN': 'bg-yellow-100 text-yellow-700',
 }
 
+function SourceIcon({ source }: { source?: string }) {
+  const [mounted, setMounted] = useState(false)
+  
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+  
+  if (!mounted) {
+    return <div className="w-20 h-20 bg-gray-100 rounded-lg border border-gray-200" />
+  }
+  
+  const iconMap: Record<string, string> = {
+    '百度': 'B',
+    'Bing搜索': 'Bi',
+    '搜狗': 'S',
+    '头条': 'T',
+    'CSDN': 'C',
+  }
+  
+  return (
+    <div className="w-20 h-20 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center">
+      <span className="text-lg font-bold text-gray-500">
+        {iconMap[source || ''] || '?'}
+      </span>
+    </div>
+  )
+}
+
 export default function SearchResults({ results, aiSummary, cached }: SearchResultsProps) {
   if (results.length === 0) {
     return (
       <div className="w-full max-w-4xl mt-8 text-center py-12">
-        <div className="text-6xl mb-4">🔍</div>
+        <div className="text-6xl mb-4">-</div>
         <p className="text-gray-500 text-lg">未找到相关结果</p>
       </div>
     )
@@ -47,7 +79,7 @@ export default function SearchResults({ results, aiSummary, cached }: SearchResu
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
           <span className="text-sm text-gray-600">
             共找到 <span className="font-bold text-gray-900">{results.length}</span> 个结果
           </span>
@@ -69,35 +101,22 @@ export default function SearchResults({ results, aiSummary, cached }: SearchResu
                         src={result.image} 
                         alt=""
                         className="w-20 h-20 object-cover rounded-lg border border-gray-200"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none'
-                        }}
+                        loading="lazy"
                       />
                     </div>
                   ) : (
-                    <div className="flex-shrink-0 w-20 h-20 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center">
-                      <span className="text-3xl">
-                        {result.source === '百度' && '🔍'}
-                        {result.source === 'Bing搜索' && '🌐'}
-                        {result.source === '搜狗' && '🦊'}
-                        {result.source === '头条' && '📰'}
-                        {result.source === 'CSDN' && '💻'}
-                        {!result.source && '📄'}
-                      </span>
-                    </div>
+                    <SourceIcon source={result.source} />
                   )}
                   
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <a
-                        href={result.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-lg text-blue-600 hover:text-blue-800 hover:underline font-medium line-clamp-2 flex-1"
-                      >
-                        {result.title}
-                      </a>
-                    </div>
+                    <a
+                      href={result.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-lg text-blue-600 hover:text-blue-800 hover:underline font-medium line-clamp-2"
+                    >
+                      {result.title}
+                    </a>
                     
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${colorClass}`}>
