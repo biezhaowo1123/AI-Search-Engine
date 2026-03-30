@@ -50,6 +50,7 @@
 | **文本嵌入** | 智谱 Embedding API / Minimax Embedding | ✅ | API 调用 |
 | **向量数据库** | 腾讯云向量数据库 | ✅ | 托管服务 |
 | **缓存** | 阿里云 Redis | ✅ | 国内节点 |
+| **媒体处理** | FFmpeg | ✅ | 视频帧提取（GPL/LGPL）|
 | **部署** | Docker + 阿里云函数计算 | ✅ | Serverless |
 
 ---
@@ -96,7 +97,7 @@
 - 日志：阿里云日志服务 SLS
 - 指标：阿里云 Prometheus
 - 告警：钉钉/企微通知
-- 链路追踪：Apache SkyWalking
+- 链路追踪：阿里云 ARMS
 
 ---
 
@@ -159,9 +160,9 @@ Response:
 {
   "api_key": "string",
   "rate_limit": {
-    "per_minute": 60,
-    "per_hour": 1000,
-    "per_day": 10000
+    "free":     { "per_minute": 10,  "per_hour": 100,  "per_day": 500 },
+    "pro":      { "per_minute": 60,  "per_hour": 1000, "per_day": 10000 },
+    "enterprise": { "per_minute": 300, "per_hour": 10000, "per_day": 100000 }
   }
 }
 ```
