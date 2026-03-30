@@ -40,17 +40,53 @@ def get_random_headers():
     }
 
 CRAWLER_SOURCES = {
-    "bing": {
-        "name": "Bing搜索",
-        "url": "https://cn.bing.com/search?q={query}&first={page}",
-    },
     "baidu": {
         "name": "百度",
-        "url": "https://www.baidu.com/s?wd={query}&pn={(page-1)*10}",
+        "url": "https://www.baidu.com/s?wd={query}&pn={offset}",
+        "offset_calc": lambda page: (page - 1) * 10,
+        "priority": 1,
+    },
+    "bing": {
+        "name": "Bing搜索",
+        "url": "https://cn.bing.com/search?q={query}&first={offset}",
+        "offset_calc": lambda page: (page - 1) * 10,
+        "priority": 2,
     },
     "sogou": {
         "name": "搜狗",
         "url": "https://www.sogou.com/web?query={query}&page={page}",
+        "offset_calc": lambda page: page,
+        "priority": 3,
+    },
+    "toutiao": {
+        "name": "头条",
+        "url": "https://so.toutiao.com/search?keyword={query}&page={page}",
+        "offset_calc": lambda page: page,
+        "priority": 4,
+    },
+    "zhihu": {
+        "name": "知乎",
+        "url": "https://www.zhihu.com/search?type=content&q={query}",
+        "offset_calc": lambda page: page,
+        "priority": 5,
+    },
+    "github": {
+        "name": "GitHub",
+        "url": "https://github.com/search?q={query}&type=repositories",
+        "offset_calc": lambda page: page,
+        "priority": 6,
+    },
+    "stackoverflow": {
+        "name": "StackOverflow",
+        "url": "https://stackoverflow.com/search?q={query}",
+        "offset_calc": lambda page: page,
+        "priority": 7,
+    },
+    "csdn": {
+        "name": "CSDN",
+        "url": "https://so.csdn.net/so/search?q={query}&page={page}",
+        "offset_calc": lambda page: page,
+        "priority": 8,
     },
 }
 
@@ -59,6 +95,7 @@ class SearchService:
         self.timeout = 45.0
         self.max_retries = 3
         self.retry_delay = 2
+        self.max_results_per_source = 5
 
     async def _fetch_with_retry(self, client: httpx.AsyncClient, url: str) -> Optional[str]:
         for attempt in range(self.max_retries):
@@ -83,8 +120,11 @@ class SearchService:
     async def _fetch_page(self, client: httpx.AsyncClient, source: str, query: str, page: int = 1) -> list[SearchResult]:
         try:
             source_info = CRAWLER_SOURCES.get(source, {})
-            url = source_info["url"].format(query=query, page=page)
-            name = source_info["name"]
+            url_template = source_info.get("url", "")
+            offset_calc = source_info.get("offset_calc", lambda p: p)
+            offset = offset_calc(page)
+            url = url_template.format(query=query, page=page, offset=offset)
+            name = source_info.get("name", source)
 
             html = await self._fetch_with_retry(client, url)
             if html:
@@ -98,20 +138,44 @@ class SearchService:
         try:
             soup = BeautifulSoup(html, "lxml")
 
-            if source == "bing":
-                results = self._parse_bing(soup, name)
-            elif source == "baidu":
-                results = self._parse_baidu(soup, name)
-            elif source == "sogou":
-                results = self._parse_sogou(soup, name)
+            parsers = {
+                "baidu": self._parse_baidu,
+                "bing": self._parse_bing,
+                "sogou": self._parse_sogou,
+                "toutiao": self._parse_toutiao,
+                "zhihu": self._parse_zhihu,
+                "github": self._parse_github,
+                "stackoverflow": self._parse_stackoverflow,
+                "csdn": self._parse_csdn,
+            }
+            
+            parser = parsers.get(source)
+            if parser:
+                results = parser(soup, name)
 
         except Exception as e:
             print(f"Parse Error [{source}]: {e}")
         return results
 
+    def _parse_baidu(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
+        results = []
+        for item in soup.select(".result, .c-container")[:self.max_results_per_source]:
+            title_elem = item.select_one("h3 a") or item.select_one("a")
+            snippet_elem = item.select_one(".c-abstract") or item.select_one(".content-right")
+            date_elem = item.select_one(".c-color-gray") or item.select_one(".c-author")
+            if title_elem and title_elem.get("href"):
+                results.append(SearchResult(
+                    title=title_elem.get_text(strip=True),
+                    url=title_elem.get("href", ""),
+                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
+                    date=date_elem.get_text(strip=True) if date_elem else None,
+                    source=name
+                ))
+        return results
+
     def _parse_bing(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
         results = []
-        for item in soup.select("li.b_algo")[:10]:
+        for item in soup.select("li.b_algo")[:self.max_results_per_source]:
             title_elem = item.select_one("h2 a")
             snippet_elem = item.select_one("p")
             if title_elem:
@@ -123,31 +187,96 @@ class SearchService:
                 ))
         return results
 
-    def _parse_baidu(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
-        results = []
-        for item in soup.select(".result, .c-container")[:10]:
-            title_elem = item.select_one("h3 a") or item.select_one("a")
-            snippet_elem = item.select_one(".c-abstract") or item.select_one(".content-right")
-            date_elem = item.select_one(".c-color-gray") or item.select_one(".c-author")
-            if title_elem:
-                results.append(SearchResult(
-                    title=title_elem.get_text(strip=True),
-                    url=title_elem.get("href", ""),
-                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
-                    date=date_elem.get_text(strip=True) if date_elem else None,
-                    source=name
-                ))
-        return results
-
     def _parse_sogou(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
         results = []
-        for item in soup.select(".vrwrap, .result")[:10]:
+        for item in soup.select(".vrwrap, .result")[:self.max_results_per_source]:
             title_elem = item.select_one("h3 a") or item.select_one(".rb_title a")
             snippet_elem = item.select_one(".str-text, .rb_desc")
             if title_elem:
                 results.append(SearchResult(
                     title=title_elem.get_text(strip=True),
                     url=title_elem.get("href", ""),
+                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
+                    source=name
+                ))
+        return results
+
+    def _parse_toutiao(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
+        results = []
+        for item in soup.select(".article-card, .result-item")[:self.max_results_per_source]:
+            title_elem = item.select_one(".article-title, .title")
+            link_elem = item.select_one("a")
+            snippet_elem = item.select_one(".article-desc, .desc")
+            title = title_elem.get_text(strip=True) if title_elem else ""
+            if title:
+                results.append(SearchResult(
+                    title=title,
+                    url=link_elem.get("href", "") if link_elem else "",
+                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
+                    source=name
+                ))
+        return results
+
+    def _parse_zhihu(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
+        results = []
+        for item in soup.select(".List-item, .ContentItem")[:self.max_results_per_source]:
+            title_elem = item.select_one(".ContentItem-title a") or item.select_one("h2 a")
+            link_elem = item.select_one("a[itemprop='url']")
+            snippet_elem = item.select_one(".RichText") or item.select_one(".excerpt")
+            title = title_elem.get_text(strip=True) if title_elem else ""
+            if title:
+                url = title_elem.get("href", "") if title_elem else ""
+                if url and not url.startswith("http"):
+                    url = f"https://www.zhihu.com{url}"
+                results.append(SearchResult(
+                    title=title,
+                    url=url,
+                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
+                    source=name
+                ))
+        return results
+
+    def _parse_github(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
+        results = []
+        for item in soup.select(".repo-list-item, .Box-row")[:self.max_results_per_source]:
+            title_elem = item.select_one("a[itemprop='name codeRepository']") or item.select_one(".h3")
+            link_elem = item.select_one("a[itemprop='name codeRepository']")
+            snippet_elem = item.select_one(".col-9") or item.select_one(".prc-description")
+            if title_elem:
+                title = title_elem.get_text(strip=True)
+                results.append(SearchResult(
+                    title=title,
+                    url=f"https://github.com{link_elem.get('href', '')}" if link_elem else "",
+                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
+                    source=name
+                ))
+        return results
+
+    def _parse_stackoverflow(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
+        results = []
+        for item in soup.select(".question-summary, .s-post-summary")[:self.max_results_per_source]:
+            title_elem = item.select_one(".question-hyperlink") or item.select_one(".s-post-summary--header")
+            link_elem = item.select_one(".question-hyperlink")
+            snippet_elem = item.select_one(".excerpt") or item.select_one(".s-post-summary--summary")
+            if title_elem:
+                results.append(SearchResult(
+                    title=title_elem.get_text(strip=True),
+                    url=f"https://stackoverflow.com{link_elem.get('href', '')}" if link_elem else "",
+                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
+                    source=name
+                ))
+        return results
+
+    def _parse_csdn(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
+        results = []
+        for item in soup.select(".article-item, .search-item")[:self.max_results_per_source]:
+            title_elem = item.select_one(".article-title a") or item.select_one("h4 a")
+            link_elem = item.select_one("a")
+            snippet_elem = item.select_one(".description, .article-snippet")
+            if title_elem:
+                results.append(SearchResult(
+                    title=title_elem.get_text(strip=True),
+                    url=link_elem.get("href", "") if link_elem else "",
                     snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
                     source=name
                 ))
@@ -161,16 +290,18 @@ class SearchService:
             return results[:page_size], True
 
         all_results = []
+        sorted_sources = sorted(CRAWLER_SOURCES.items(), key=lambda x: x[1]["priority"])
+
         async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
-            for source in CRAWLER_SOURCES.keys():
+            for source, _ in sorted_sources:
                 results = await self._fetch_page(client, source, query, page)
                 all_results.extend(results)
-                await asyncio.sleep(random.uniform(1.0, 3.0))
+                await asyncio.sleep(random.uniform(0.5, 2.0))
 
         seen_urls = set()
         unique_results = []
         for r in all_results:
-            if r.url and r.url not in seen_urls and r.url.startswith("http"):
+            if r.url and r.url.startswith("http") and r.url not in seen_urls:
                 seen_urls.add(r.url)
                 unique_results.append(r)
 

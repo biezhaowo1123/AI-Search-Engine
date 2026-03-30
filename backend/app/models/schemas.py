@@ -10,6 +10,7 @@ class SearchResult(BaseModel):
     title: str
     url: str
     snippet: str
+    source: Optional[str] = None
     date: Optional[str] = None
 
 class SearchResponse(BaseModel):
