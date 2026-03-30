@@ -8,6 +8,7 @@ interface SearchResult {
   title: string
   url: string
   snippet: string
+  source?: string
   date?: string
 }
 
@@ -49,19 +50,43 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center pt-20 px-4">
-      <h1 className="text-4xl font-bold text-gray-900 mb-2">AI 搜索引擎</h1>
-      <p className="text-gray-600 mb-8">智能搜索 + AI 摘要</p>
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <div className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-gray-100 z-10">
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <h1 className="text-2xl font-bold text-gray-900">
+            <span className="text-blue-600">AI</span> 搜索引擎
+          </h1>
+        </div>
+      </div>
 
-      <SearchBox onSearch={handleSearch} loading={loading} />
+      <div className="max-w-6xl mx-auto px-4 py-12">
+        <div className="text-center mb-10">
+          <h2 className="text-4xl font-bold text-gray-900 mb-3">
+            智能搜索，精准答案
+          </h2>
+          <p className="text-lg text-gray-600">
+            整合多个搜索源，AI 智能摘要
+          </p>
+        </div>
 
-      {searched && (
-        <SearchResults
-          results={results}
-          aiSummary={aiSummary}
-          cached={cached}
-        />
-      )}
+        <div className="flex justify-center mb-8">
+          <SearchBox onSearch={handleSearch} loading={loading} />
+        </div>
+
+        {searched && (
+          <SearchResults
+            results={results}
+            aiSummary={aiSummary}
+            cached={cached}
+          />
+        )}
+      </div>
+
+      <footer className="border-t border-gray-200 mt-auto py-6">
+        <div className="max-w-6xl mx-auto px-4 text-center text-sm text-gray-500">
+          AI 搜索引擎 - 支持百度、Bing、搜狗、头条等多个搜索源
+        </div>
+      </footer>
     </main>
   )
 }
