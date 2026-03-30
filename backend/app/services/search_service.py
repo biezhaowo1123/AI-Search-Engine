@@ -64,34 +64,53 @@ CRAWLER_SOURCES = {
         "offset_calc": lambda page: page,
         "priority": 4,
     },
+    "zhihu": {
+        "name": "知乎",
+        "url": "https://www.zhihu.com/search?type=content&q={query}&page={page}",
+        "offset_calc": lambda page: page,
+        "priority": 5,
+    },
+    "github": {
+        "name": "GitHub",
+        "url": "https://github.com/search?q={query}&type=repositories&page={page}",
+        "offset_calc": lambda page: page,
+        "priority": 6,
+    },
     "csdn": {
         "name": "CSDN",
         "url": "https://so.csdn.net/so/search?q={query}&page={page}",
         "offset_calc": lambda page: page,
-        "priority": 5,
+        "priority": 7,
     },
 }
 
 class SearchService:
     def __init__(self):
-        self.timeout = 45.0
-        self.max_retries = 3
-        self.retry_delay = 2
+        self.timeout = 30.0
+        self.max_retries = 2
+        self.retry_delay = 1
         self.max_results_per_source = 5
+        self.problematic_sources = {"zhihu", "github"}
+        self.problematic_timeout = 10.0
 
-    async def _fetch_with_retry(self, client: httpx.AsyncClient, url: str) -> Optional[str]:
+    async def _fetch_with_retry(self, client: httpx.AsyncClient, url: str, source: str = "") -> Optional[str]:
+        timeout = self.problematic_timeout if source in self.problematic_sources else self.timeout
         for attempt in range(self.max_retries):
             try:
                 headers = get_random_headers()
-                response = await client.get(url, headers=headers, timeout=self.timeout)
+                response = await client.get(url, headers=headers, timeout=timeout)
                 if response.status_code == 200:
                     return response.text
                 elif response.status_code == 403:
+                    if source in self.problematic_sources:
+                        return None
                     print(f"Access forbidden (403): {url}")
                 elif response.status_code == 429:
                     print(f"Rate limited (429): {url}, waiting...")
                     await asyncio.sleep(self.retry_delay * 2)
             except Exception as e:
+                if source in self.problematic_sources and attempt == 0:
+                    return None
                 print(f"Fetch attempt {attempt + 1} failed for {url}: {e}")
             
             if attempt < self.max_retries - 1:
@@ -108,7 +127,7 @@ class SearchService:
             url = url_template.format(query=query, page=page, offset=offset)
             name = source_info.get("name", source)
 
-            html = await self._fetch_with_retry(client, url)
+            html = await self._fetch_with_retry(client, url, source)
             if html:
                 return self._parse_html(source, html, query, name)
         except Exception as e:
@@ -125,6 +144,8 @@ class SearchService:
                 "bing": self._parse_bing,
                 "sogou": self._parse_sogou,
                 "toutiao": self._parse_toutiao,
+                "zhihu": self._parse_zhihu,
+                "github": self._parse_github,
                 "csdn": self._parse_csdn,
             }
             
@@ -191,6 +212,44 @@ class SearchService:
                 results.append(SearchResult(
                     title=title,
                     url=link_elem.get("href", "") if link_elem else "",
+                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
+                    source=name
+                ))
+        return results
+
+    def _parse_zhihu(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
+        results = []
+        for item in soup.select(".List-item, .ContentItem, .SearchResult-item")[:self.max_results_per_source]:
+            title_elem = item.select_one(".ContentItem-title a") or item.select_one("h2 a") or item.select_one(".SearchResult-item-title")
+            link_elem = item.select_one("a[itemprop='url']") or item.select_one(".SearchResult-item-title a")
+            snippet_elem = item.select_one(".RichText") or item.select_one(".excerpt") or item.select_one(".SearchResult-item-snippet")
+            title = title_elem.get_text(strip=True) if title_elem else ""
+            if title:
+                url = title_elem.get("href", "") if title_elem else ""
+                if url and not url.startswith("http"):
+                    url = f"https://www.zhihu.com{url}"
+                results.append(SearchResult(
+                    title=title,
+                    url=url,
+                    snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
+                    source=name
+                ))
+        return results
+
+    def _parse_github(self, soup: BeautifulSoup, name: str) -> list[SearchResult]:
+        results = []
+        for item in soup.select(".repo-list-item, .Box-row, .search-result-item")[:self.max_results_per_source]:
+            title_elem = item.select_one("a[itemprop='name codeRepository']") or item.select_one(".h3") or item.select_one(".search-result-title")
+            link_elem = item.select_one("a[itemprop='name codeRepository']") or item.select_one(".search-result-title a")
+            snippet_elem = item.select_one(".col-9") or item.select_one(".prc-description") or item.select_one(".search-result-description")
+            if title_elem:
+                title = title_elem.get_text(strip=True)
+                url = link_elem.get("href", "") if link_elem else ""
+                if url and not url.startswith("http"):
+                    url = f"https://github.com{url}"
+                results.append(SearchResult(
+                    title=title,
+                    url=url,
                     snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
                     source=name
                 ))
