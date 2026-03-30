@@ -12,6 +12,7 @@ class SearchResult(BaseModel):
     snippet: str
     source: Optional[str] = None
     date: Optional[str] = None
+    image: Optional[str] = None
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]

@@ -75,7 +75,7 @@ class SearchService:
     def __init__(self):
         self.timeout = 30.0
         self.max_retries = 2
-        self.max_results_per_source = 5
+        self.max_results_per_source = 10
 
     async def _fetch_with_retry(self, client: httpx.AsyncClient, url: str) -> Optional[str]:
         for attempt in range(self.max_retries):
@@ -132,12 +132,17 @@ class SearchService:
         for item in soup.select(".result, .c-container")[:self.max_results_per_source]:
             title_elem = item.select_one("h3 a") or item.select_one("a")
             snippet_elem = item.select_one(".c-abstract") or item.select_one(".content-right")
+            img_elem = item.select_one("img") or item.select_one(".c-img")
+            img_url = None
+            if img_elem:
+                img_url = img_elem.get("src") or img_elem.get("data-src")
             if title_elem and title_elem.get("href"):
                 results.append(SearchResult(
                     title=title_elem.get_text(strip=True),
                     url=title_elem.get("href", ""),
                     snippet=snippet_elem.get_text(strip=True)[:200] if snippet_elem else "",
-                    source=name
+                    source=name,
+                    image=img_url
                 ))
         return results
 
@@ -146,12 +151,15 @@ class SearchService:
         for item in soup.select("li.b_algo")[:self.max_results_per_source]:
             title_elem = item.select_one("h2 a")
             snippet_elem = item.select_one("p")
+            img_elem = item.select_one("img.thumb")
+            img_url = img_elem.get("src") if img_elem else None
             if title_elem:
                 results.append(SearchResult(
                     title=title_elem.get_text(strip=True),
                     url=title_elem.get("href", ""),
                     snippet=snippet_elem.get_text(strip=True) if snippet_elem else "",
-                    source=name
+                    source=name,
+                    image=img_url
                 ))
         return results
 
