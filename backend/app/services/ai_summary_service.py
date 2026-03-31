@@ -12,7 +12,7 @@ except ModuleNotFoundError:
 class AISummaryService:
     def __init__(self):
         self.api_key = config.MINIMAX_API_KEY
-        self.api_url = f"{config.MINIMAX_API_URL}/text/chatcompletion_pro"
+        self.api_url = f"{config.MINIMAX_API_URL}/text/chatcompletion_v2"
 
     async def generate_summary(self, query: str, context: list[str]) -> Optional[str]:
         if not self.api_key:
@@ -20,14 +20,19 @@ class AISummaryService:
 
         context_text = "\n\n".join([f"[{i+1}] {c}" for i, c in enumerate(context)])
 
-        prompt = f"""基于以下搜索结果，为用户的问题生成一个简洁的答案摘要。
+        prompt = f"""基于以下搜索结果，为用户的问题生成一个完整的答案。
 
 用户问题: {query}
 
 搜索结果:
 {context_text}
 
-请生成一段 2-3 句话的摘要，直接回答用户问题。"""
+请生成答案，包含：
+1. 2-3句话的直接回答
+2. 如果搜索结果中有代码示例，请用代码块展示
+3. 如果有技术步骤，用列表清晰展示
+
+用Markdown格式输出。"""
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -35,23 +40,11 @@ class AISummaryService:
         }
 
         payload = {
-            "model": "abab5.5-chat",
-            "tokens_to_generate": 200,
-            "temperature": 0.7,
-            "bot_setting": [
-                {
-                    "bot_name": "AI助手",
-                    "identity": "助手",
-                    "content": "你是一个友好的AI助手"
-                }
-            ],
-            "reply_constraints": {
-                "reply_language": "auto",
-                "sender_type": "BOT",
-                "sender_name": "AI助手"
-            },
+            "model": config.MINIMAX_MODEL,
+            "tokens_to_generate": config.MINIMAX_TOKENS,
+            "temperature": config.MINIMAX_TEMPERATURE,
             "messages": [
-                {"role": "user", "content": prompt, "sender_name": "用户", "sender_type": "USER"}
+                {"role": "user", "content": prompt}
             ]
         }
 
@@ -60,9 +53,11 @@ class AISummaryService:
                 response = await client.post(self.api_url, headers=headers, json=payload)
                 if response.status_code == 200:
                     data = response.json()
-                    reply = data.get("reply", "")
-                    if reply:
-                        return reply.strip()
+                    choices = data.get("choices", [])
+                    if choices:
+                        reply = choices[0].get("message", {}).get("content", "")
+                        if reply:
+                            return reply.strip()
         except Exception as e:
             print(f"AI Summary Error: {e}")
 
